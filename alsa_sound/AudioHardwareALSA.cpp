@@ -460,9 +460,12 @@ status_t AudioHardwareALSA::setVoiceVolume(float v)
     vol = 100 - vol;
 
     if (mALSADevice) {
-        if(newMode == AUDIO_MODE_IN_COMMUNICATION) {
-            mALSADevice->setVoipVolume(vol);
-        } else if (newMode == AUDIO_MODE_IN_CALL){
+        /* Check for MODE_IN_COMMUNICATION is removed as Direct Output is used
+	 * for voicemail cases where stream is opened without any mode set or
+	 * mode set to IN_CALL and user still expect volume to be updated for
+	 * direct output stream */
+        mALSADevice->setVoipVolume(vol);
+        if (newMode == AUDIO_MODE_IN_CALL) {
                if (mCSCallActive == CS_ACTIVE)
                    mALSADevice->setVoiceVolume(vol);
                else if (mVoice2CallActive == CS_ACTIVE_SESSION2)
@@ -1850,36 +1853,14 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
             {
             route_devices = devices | mCurDevice;
             }
-            mALSADevice->route(&(*it), route_devices, mode());
         } else {
 #ifdef QCOM_USBAUDIO_ENABLED
             if(devices & AudioSystem::DEVICE_IN_ANLG_DOCK_HEADSET ||
                devices & AudioSystem::DEVICE_IN_PROXY) {
                 devices |= AudioSystem::DEVICE_IN_PROXY;
                 ALOGD("routing everything from proxy");
-            mALSADevice->route(&(*it), devices, mode());
-            } else
-#endif
-            {
-                mALSADevice->route(&(*it), devices, mode());
             }
-        }
-
-        if(!strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC) ||
-           !strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_LOWLATENCY_REC) ||
-           !strcmp(it->useCase, SND_USE_CASE_VERB_HIFI_REC_COMPRESSED) ||
-#if defined(QCOM_FM_ENABLED) || defined(STE_FM)
-           !strcmp(it->useCase, SND_USE_CASE_VERB_FM_REC) ||
-           !strcmp(it->useCase, SND_USE_CASE_VERB_FM_A2DP_REC) ||
 #endif
-           !strcmp(it->useCase, SND_USE_CASE_VERB_DL_REC) ||
-           !strcmp(it->useCase, SND_USE_CASE_VERB_UL_DL_REC) ||
-           !strcmp(it->useCase, SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_DL) ||
-           !strcmp(it->useCase, SND_USE_CASE_VERB_CAPTURE_COMPRESSED_VOICE_UL_DL) ||
-           !strcmp(it->useCase, SND_USE_CASE_VERB_INCALL_REC)) {
-            snd_use_case_set(mUcMgr, "_verb", it->useCase);
-        } else {
-            snd_use_case_set(mUcMgr, "_enamod", it->useCase);
         }
         if(sampleRate) {
             it->sampleRate = *sampleRate;
@@ -1912,18 +1893,12 @@ AudioHardwareALSA::openInputStream(uint32_t devices,
             }
         }
 #endif
-        err = mALSADevice->open(&(*it));
         if (*format == AUDIO_FORMAT_AMR_WB) {
              ALOGV("### Setting bufsize to 61");
              it->bufferSize = 61;
         }
-        if (err) {
-           ALOGE("Error opening pcm input device");
-           mDeviceList.erase(it);
-        } else {
-           in = new AudioStreamInALSA(this, &(*it), acoustics);
-           err = in->set(format, channels, sampleRate, devices);
-        }
+        in = new AudioStreamInALSA(this, &(*it), acoustics);
+        err = in->set(format, channels, sampleRate, devices);
         if (status) *status = err;
         return in;
       }
